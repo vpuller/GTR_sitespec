@@ -17,9 +17,7 @@ sys.path.append('/ebio/ag-neher/share/users/vpuller/myTOOLS/')
 #sys.path.append('./') 
 import ancestor_reconstruction_class1 as ARClass
 import structures_on_tree1 as StrucTree 
-#import Vadim_toolbox as Vtools
 import Vadim_toolbox_file as vp
-#import Struct_inv_file1 as Sinv
 
 def exchange(seq):
     '''Obtain all sequences obtained by purine-purine or 
@@ -177,7 +175,9 @@ if __name__=="__main__":
         ssigma_a = p_a**2/(GTR.n_ij.sum(axis = 1)+GTR.root_states+h)  
         S_a = -((h+p_a)*np.log(h+p_a)).sum(axis=0)
     
-    dir_name = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/'
+    outdir_name = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/tmp/'
+    if not os.path.exists(outdir_name):
+        os.makedirs(outdir_name)
 #    plt.figure(10,figsize=(20,10))
 #    plt.clf()        
 #    plt.plot(S_a)
@@ -194,7 +194,7 @@ if __name__=="__main__":
     for j in xrange(5):    
         plt.plot(p_sort[-j-1,np.argsort(p_sort[-1,:])])
     plt.ylabel('p_sort') 
-    plt.savefig(dir_name + 'nuc_freq_sorted.pdf')
+    plt.savefig(outdir_name + 'nuc_freq_sorted.pdf')
     plt.close(40)
     
     plt.figure(45,figsize=(20,10))
@@ -205,7 +205,7 @@ if __name__=="__main__":
     plt.title('Dominant nuc. frequency')
     plt.legend(('GTR','alignment','tree'))
     plt.ylabel('p_sort') 
-    plt.savefig(dir_name + 'Dominant_nuc_freq.pdf')
+    plt.savefig(outdir_name + 'Dominant_nuc_freq.pdf')
     plt.close(45)
 
     p_pur = p_a[0,:] + p_a[2,:]
@@ -218,7 +218,7 @@ if __name__=="__main__":
     plt.plot(p_a[4,jjpur])
     plt.ylabel('p_sort') 
     plt.legend(('purines: A,G', 'pyrimidines: C,T','gaps'))
-    plt.savefig(dir_name + 'Pur_Pyr.pdf')
+    plt.savefig(outdir_name + 'Pur_Pyr.pdf')
     plt.close(50)
     
     
@@ -329,7 +329,7 @@ if __name__=="__main__":
     plt.plot(p_i_swap_sort[-1,idx_sort])
     plt.ylabel('p_sort')   
     plt.legend(('GTR','simple classes','swap classes'),loc=4)
-    plt.savefig(dir_name + 'simple_ACGT_classes.pdf')    
+    plt.savefig(outdir_name + 'simple_ACGT_classes.pdf')    
     
     idx_sort = np.argsort(p_i_rec_sort[-1,:])
     plt.figure(110,figsize=(20,10))
@@ -339,7 +339,7 @@ if __name__=="__main__":
     plt.plot(p_i_swap_sort[-1,idx_sort])
     plt.ylabel('p_sort')   
     plt.legend(('GTR','simple classes','swap classes'),loc=4)
-#    plt.savefig(dir_name + 'simple_ACGT_classes.pdf')  
+#    plt.savefig(outdir_name + 'simple_ACGT_classes.pdf')  
 
     idx_sort = np.argsort(p_i_swap_sort[-1,:])
     plt.figure(120,figsize=(20,10))
@@ -349,4 +349,4 @@ if __name__=="__main__":
     plt.plot(p_i_swap_sort[-1,idx_sort])
     plt.ylabel('p_sort')   
     plt.legend(('GTR','simple classes','swap classes'),loc=4)
-#    plt.savefig(dir_name + 'simple_ACGT_classes.pdf')  
+#    plt.savefig(outdir_name + 'simple_ACGT_classes.pdf')  
