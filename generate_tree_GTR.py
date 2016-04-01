@@ -8,12 +8,13 @@ Created on Mon Mar 21 18:09:38 2016
 from __future__ import division
 import numpy as np
 from scipy import linalg as LA
-from Bio import AlignIO, Phylo
+from Bio import Phylo #, AlignIO
 import matplotlib.pyplot as plt
 #from scipy import optimize
 import sys, os
 import GTR_twoseq
 import copy as copy
+import time
 
 sys.path.append('/ebio/ag-neher/share/users/vpuller/myTOOLS/') 
 import Vadim_toolbox_file as vp
@@ -38,67 +39,18 @@ def P_to_seq(P,alphabet = 'ACGT'):
     seq_num[np.where(P > 0)[1]] = np.where(P >0)[0]
     return ''.join(vp.numbers_to_string(seq_num,alphabet = alphabet))
 
-
-def evolve_seq_Qija_P(P0, t, Qija):
-    '''
-    Evolve sequence using site - specific GTR model
-    '''
-    (q,L) = P0.shape
+def eigLR(M):
+    (w,vr) = LA.eig(M)
+    vl = np.zeros(M.shape, dtype = 'complex')
+    for j in xrange(M.shape[0]):
+        b = np.zeros(M.shape[0]); b[j] = 1.
+        vl[:,j] = LA.solve(vr.T,b)
     
-    # evolving sequence
-    Pt = np.array([LA.expm(Qija[:,:,ja]*t).dot(P0[:,ja]) for ja in xrange(L)]).T
-#    Pt = Qija.dot(P0)[range(L),:,range(L)].T
+    return w.real, vl.real, vr.real
     
-    # measuring sequence
-    MC = np.random.uniform(size = L)
-    P1 = np.zeros((q,L))
-    for jq in xrange(q):
-        P1[jq,np.where((Pt[:jq,:].sum(axis=0) < MC)*(MC < Pt[:jq+1,:].sum(axis=0)))[0]] = 1.
-    
-    return P1
-    
-def dress_tree_seq(tree, seq_root, mu_a = None, Wij = None, p0_a = None, alphabet = 'ACGT'):
-    '''
-    Dress tree withs equences evolved according to the specified GTR model
-    '''
-    q = len(alphabet); L = len(seq_root)
-    #defining mutation matrix
-    if mu_a is None:
-        mu_a = np.ones(L)
-    
-    if Wij is None:
-        Wij = q*(np.ones((q,q)) - np.eye(q))
-        
-    if p0_a is None:
-       p0_a = np.ones((q,L))
-       
-#    mu_a = np.ones(L)
-#    Wij = q*(np.ones((q,q)) - np.eye(q))
-#    p0_a = np.ones((q,L))/q
-    Qija = np.array([mu_a[ja]*np.diag(p0_a[:,ja]).dot(Wij) - 
-    np.diag(np.sum(mu_a[ja]*np.diag(p0_a[:,ja]).dot(Wij), axis = 0)) for ja in xrange(L)])
-    Qija = np.transpose(Qija,(1,2,0))
-    
-#    n = 0
-    tree.root.seq = seq0
-#    print seq0
-    tree.root.P = seq_to_P(seq0,alphabet = alphabet)
-    for parent in tree.get_nonterminals():
-        for child in parent:
-#            print n
-#            n +=1
-#            child.seq = GTR_twoseq.evolve_seq_GTR(parent.seq,child.branch_length, Qij = Qij)
-#            child.P = seq_to_P(child.seq)
-#            child.seq = evolve_seq_Qija(clade.seq,child.branch_length, Qija)
-            child.P = evolve_seq_Qija_P(parent.P,child.branch_length, Qija)
-            child.seq = P_to_seq(child.P,alphabet = alphabet)
-#            if parent == tree.root:
-#                print child.seq
-            
-    return tree
-
 class dress_tree(object):
-    def __init__(self,tree,seq_root,mu_a = None, Wij = None, p0_a = None, alphabet = 'ACGT'):
+    def __init__(self,tree,seq_root,mu_a = None, Wij = None, p0_a = None,\
+    alphabet = 'ACGT', use_eigenvalues = True, logL = False):
         '''
         TODO
         '''
@@ -110,21 +62,56 @@ class dress_tree(object):
             mu_a = np.ones(L)
         
         if Wij is None:
-            Wij = q*(np.ones((q,q)) - np.eye(q))
+            Wij = self.q*(np.ones((self.q,self.q)) - np.eye(self.q))
             
         if p0_a is None:
-           p0_a = np.ones((q,L))
-           
-        Qija = np.array([mu_a[ja]*np.diag(p0_a[:,ja]).dot(Wij) - 
-        np.diag(np.sum(mu_a[ja]*np.diag(p0_a[:,ja]).dot(Wij), axis = 0)) for ja in xrange(L)])
-        self.Qija = np.transpose(Qija,(1,2,0))
+           p0_a = np.ones((self.q,L))
+
+        self.tree.root.seq = seq_root
+        self.tree.root.P = self.seq_to_P(seq_root)
+          
+        if use_eigenvalues:
+            self.Qija = np.zeros((self.L,self.q,self.q))
+            self.w_a = np.zeros((self.L,self.q))
+            self.vl_a = np.zeros((self.L,self.q,self.q))
+            self.vr_a = np.zeros((self.L,self.q,self.q))
+            for ja in xrange(self.L):
+                Qij = mu_a[ja]*np.diag(p0_a[:,ja]).dot(Wij)
+                Qij = Qij - np.diag(Qij.sum(axis=0))
+#                (w,vl,vr) = LA.eig(Qij, left = True)
+                (w,vl,vr) = eigLR(Qij)
+                self.w_a[ja,:] = w
+                self.vl_a[ja,:,:] = vl
+                self.vr_a[ja,:,:] = vr/np.diag(vl.T.dot(vr))
+                vr = vr/np.diag(vl.T.dot(vr))
+                self.Qija[ja,:,:] = Qij
+#                self.Qija[ja,:,:] = vr.dot(np.diag(w)).dot(vl.T)
+#                print '\n',ja, np.sum((Qij - vr.dot(np.diag(w)).dot(vl.T))**2), (vl.T.dot(vr)).sum()/q
+            if logL:
+                self.logL = 0.
+                for parent in self.tree.get_nonterminals():
+                    P_parent = self.seq_to_P(parent.seq)
+                    for child in parent:
+                        P_child = self.seq_to_P(child.seq)
+                        self.logL += np.log(np.array([P_child[:,ja].dot(self.vr_a[ja,:,:])\
+                        .dot(np.diag(np.exp(self.w_a[ja,:]*child.branch_length)))\
+                        .dot(self.vl_a[ja,:,:].T).dot(P_parent[:,ja]) 
+                        for ja in xrange(self.L)])).sum()
+#                        print parent.name, child.name, logL
+            else:
+                for parent in self.tree.get_nonterminals():
+                    for child in parent:
+                        child.P = self.evolve_seq_eig(parent.P,child.branch_length)
+                        child.seq = self.P_to_seq(child.P)
+        else:
+            Qija = np.array([mu_a[ja]*np.diag(p0_a[:,ja]).dot(Wij) - 
+            np.diag(np.sum(mu_a[ja]*np.diag(p0_a[:,ja]).dot(Wij), axis = 0)) for ja in xrange(L)])
+            self.Qija = np.transpose(Qija,(1,2,0))
         
-        self.tree.root.seq = seq0
-        self.tree.root.P = self.seq_to_P(seq0)
-        for parent in self.tree.get_nonterminals():
-            for child in parent:
-                child.P = self.evolve_seq_Qija_P(parent.P,child.branch_length)
-                child.seq = self.P_to_seq(child.P)
+            for parent in self.tree.get_nonterminals():
+                for child in parent:
+                    child.P = self.evolve_seq_Qija_P(parent.P,child.branch_length)
+                    child.seq = self.P_to_seq(child.P)
                 
     def seq_to_P(self,seq):
 #        q = len(alphabet); L = len(seq)
@@ -133,7 +120,7 @@ class dress_tree(object):
         for jbase, base in enumerate(self.alphabet):
             seq_num[np.where(seq_arr == base)] = jbase   
         P = np.zeros((self.q,self.L),dtype = 'int')
-        P[seq_num,range(L)] = 1.
+        P[seq_num,range(self.L)] = 1.
         return P
     
     def P_to_seq(self,P):
@@ -149,20 +136,44 @@ class dress_tree(object):
             seq[np.where(seq_num == jbase)] = base
         return ''.join(seq)
     
+#    def string_to_numbers(self,seq):
+#        '''
+#        Function for converting string to numbers according to the symbols's place in the alphabet
+#        '''
+#        seq_array = np.array(list(seq))
+#        seq_num=np.zeros(len(seq_array),dtype = 'int')
+#        for jbase, base in enumerate(self.alphabet):
+#            seq_num[np.where(seq_array == base)] = jbase    
+#        return seq_num
+    
     def evolve_seq_Qija_P(self,P0, t):
         '''
         Evolve sequence using site - specific GTR model
         '''
         # evolving sequence
         Pt = np.array([LA.expm(self.Qija[:,:,ja]*t).dot(P0[:,ja]) for ja in xrange(self.L)]).T
-    #    Pt = Qija.dot(P0)[range(L),:,range(L)].T
         
         # measuring sequence
         MC = np.random.uniform(size = self.L)
         P1 = np.zeros((self.q,self.L))
         for jq in xrange(self.q):
             P1[jq,np.where((Pt[:jq,:].sum(axis=0) < MC)*(MC < Pt[:jq+1,:].sum(axis=0)))[0]] = 1
-        return P1                
+        return P1    
+
+    def evolve_seq_eig(self,P0, t):
+        '''
+        Evolve sequence using site - specific GTR model
+        '''
+        # evolving sequence
+        Pt = np.array([self.vr_a[ja,:,:].dot(np.diag(np.exp(self.w_a[ja,:]*t))).dot(self.vl_a[ja,:,:].T).dot(P0[:,ja]) 
+        for ja in xrange(self.L)]).T
+
+        # measuring sequence
+        MC = np.random.uniform(size = self.L)
+        P1 = np.zeros((self.q,self.L))
+        for jq in xrange(self.q):
+            P1[jq,np.where((Pt[:jq,:].sum(axis=0) < MC)*(MC < Pt[:jq+1,:].sum(axis=0)))[0]] = 1
+        return P1              
     
 def nuc_sub_count(tree,alphabet = 'ACGT', fpar = 0.5):        
         '''
@@ -186,21 +197,22 @@ def nuc_sub_count(tree,alphabet = 'ACGT', fpar = 0.5):
                     T_i[seq_child_num,range(L)] += (1-fpar)*child.branch_length
                     substitutions[seq_child_num,seq_parent_num,range(L)] +=1  
                     
-        root_states = GTR_twoseq.seq_to_P(tree.root.seq,alphabet = alphabet)        
+        root_states = seq_to_P(tree.root.seq,alphabet = alphabet)        
         n_ij = np.copy(substitutions)     
-        n_ij[range(q),range(q),:] = 0        
+        n_ij[range(q),range(q),:] = 0   
+#        print substitutions[:,:,0],'\n', n_ij[:,:,0]
         return n_ij, T_i, root_states
 
 def nuc_freq(aln_array, alphabet = 'ACGT'):
     '''calculating frequency of different nucleotides in array'''
     return np.array([(aln_array == nuc).mean(axis=0) for nuc in alphabet])
 
-def GTR_simult(n_ija, T_ia,root_states, dp = 10**(-4), Nit = 10**4):
+def GTR_simult(sub_ija, T_ia,root_states, dp = 10**(-4), Nit = 10**4):
     '''
     Calculating components of GTR matrix for multiple sites
     
     Input arguments:
-    n_ija - transition counts matrix
+    sub_ija - transition counts matrix
     T_ia - times spent in each nucleotide state
     root_states - the nucleotide states of the tree root (for pseudocount correction)
     idx_cum - indices of the nucleotides to use
@@ -210,6 +222,7 @@ def GTR_simult(n_ija, T_ia,root_states, dp = 10**(-4), Nit = 10**4):
     '''
 #    q = n_ija.shape[0]; L = n_ija.shape[2]
     (q,L) = T_ia.shape
+    n_ija = np.copy(sub_ija)
     n_ija[range(q),range(q),:] = 0
     Lambda = np.sum(root_states,axis=0)
     
@@ -247,18 +260,9 @@ if __name__=="__main__":
     tree_file_name = '/ebio/ag-neher/share/users/vpuller/Maximum_likelihood/ML_test_sequences/RRE/HIV1B500_RRE_nuc_tree.nwk'    
     bio_tree = Phylo.read(tree_file_name, 'newick')
     bio_tree.root.branch_length = h
-    
-#    fig10=plt.figure(10,figsize = (120,240))
-#    plt.clf()
-#    ax10=fig10.add_subplot(1,1,1)
-#    Phylo.draw(bio_tree,do_show = False,axes=ax10)
-#    plt.draw()
-#    plt.savefig(outdir_name+'tree.pdf')
-#    plt.close(10)
-    
-    
+  
     # generate root sequence
-    alphabet = 'AG' #'ACGT'
+    alphabet = 'ACGT'
     q = len(alphabet)
     L = 10**2 # sequence length
     seq0 = GTR_twoseq.random_seq_p0(L,alphabet = alphabet)
@@ -272,16 +276,19 @@ if __name__=="__main__":
     p0_a = np.random.exponential(size = (q,L)); p0_a = p0_a/np.sum(p0_a,axis=0)
     Snuc0 = - ((p0_a + h)*np.log(p0_a + h)).sum(axis = 0)
     
+    t0 = time.time()
     dress = dress_tree(bio_tree, seq0, mu_a = mu_a, Wij = Wij, p0_a = p0_a, alphabet = alphabet)
-
+    t1 = time.time()
+    print 't = ', t1-t0
+#    dress = dress_tree(bio_tree, seq0, mu_a = mu_a, Wij = Wij, p0_a = p0_a, alphabet = alphabet, use_eigenvalues = False)
+#    t2 = time.time()
+#    print 't = ', t2-t1
+    
     # array of all sequences on the tree
-    arr = np.array([list(clade.seq) for clade in dress.tree.find_clades()])
+#    arr = np.array([list(clade.seq) for clade in dress.tree.find_clades()])
+    arr = np.array([list(clade.seq) for clade in dress.tree.get_terminals()])
     freqs = nuc_freq(arr, alphabet = alphabet)
     Snuc = - ((freqs + h)*np.log(freqs + h)).sum(axis = 0)
-
-#    fracT = T_i/np.sum(T_i, axis = 0)
-#    ST =  - ((fracT + h)*np.log(fracT + h)).sum(axis = 0)
-    
     
     # GTR fitting
     n_ij, T_i, root_states = nuc_sub_count(dress.tree, alphabet = alphabet)   
@@ -297,17 +304,6 @@ if __name__=="__main__":
     for jcat in xrange(q + 1):
         idx_cat.append(np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) == jcat)[0])
     
-#    p_appx = np.zeros((q,L))
-#    if q >2:
-#        for jnuc in xrange(q):
-#            idx = range(q)
-#            idx.remove(jnuc)
-#            p_appx[jnuc,:] = n_ij[idx,:,:][:,idx,:].sum(axis = (0,1))/T_i[idx,:].sum(axis = 0)
-#    else:
-#        p_appx[0,:] = n_ij[0,1,:]/T_i[1,:]
-#        p_appx[1,:] = n_ij[1,0,:]/T_i[0,:]
-#    p_appx = p_appx/np.sum(p_appx, axis =0)
-#    S_appx = -((h+p_appx)*np.log(h+p_appx)).sum(axis=0)
     
     plt.figure(10,figsize = (20,6*(q+1))); plt.clf()
     for jnuc, nuc in enumerate(alphabet):
@@ -340,17 +336,6 @@ if __name__=="__main__":
     plt.savefig(outdir_name + 'freq_hist.pdf')
     plt.close(20)
     
-#    plt.figure(20, figsize = (6*(q+1),6)); plt.clf()
-#    for jnuc, nuc in enumerate(alphabet):
-#        plt.subplot(1,q+1,jnuc+1)
-#        plt.hist(fracT[jnuc,:])
-#        plt.xlabel('fraction of time'); plt.title(nuc)
-#    plt.subplot(1,q+1,q+1)
-#    plt.hist(ST/np.log(q))
-#    plt.xlabel('entropy'); plt.title('Snuc')
-#    plt.savefig(outdir_name + 'fracT_hist.pdf')
-#    plt.close(20)
-    
     plt.figure(20, figsize = (6*(q+1),6)); plt.clf()
     for jnuc, nuc in enumerate(alphabet):
         plt.subplot(1,q+1,jnuc+1)
@@ -361,6 +346,65 @@ if __name__=="__main__":
     plt.xlabel('entropy'); plt.title('Snuc')
     plt.savefig(outdir_name + 'freqGTR_hist.pdf')
     plt.close(20)
+
+
+    #testing dependence of the quality of GTR reconstruction on mutation rate
+    #dressing tree with sequences
+    branch_lengths = np.array([clade.branch_length for clade in dress.tree.find_clades()])
+    mu_max = 1/branch_lengths.max()
+#    mmu = np.linspace(0.1,10,num = 20)
+    mmu = 0.1*10**np.linspace(0,2,num=20)
+    Wij = q*(np.ones((q,q)) - np.eye(q))
+#    p0_a = np.ones((q,L))/q
+    p0_a = np.random.exponential(size = (q,L)); p0_a = p0_a/np.sum(p0_a,axis=0)
+#    Snuc0 = - ((p0_a + h)*np.log(p0_a + h)).sum(axis = 0)
+    Nsample = 100
+    dist_GTR = np.zeros((Nsample,mmu.shape[0]))
+    dist_freqs = np.zeros((Nsample,mmu.shape[0]))
+    for jsample in xrange(Nsample):
+        print 'sample #{}'.format(jsample)
+        for jmu, mu in enumerate(mmu):
+            mu_a = mu*np.ones(L)
+            
+            dress = dress_tree(bio_tree, seq0, mu_a = mu_a, Wij = Wij, p0_a = p0_a, alphabet = alphabet, use_eigenvalues = True)
+            
+            # array of all sequences on the tree
+            arr = np.array([list(clade.seq) for clade in dress.tree.find_clades()])
+            freqs = nuc_freq(arr, alphabet = alphabet)
+    #        Snuc = - ((freqs + h)*np.log(freqs + h)).sum(axis = 0)
+            dist_freqs[jsample,jmu] = np.sum((freqs - p0_a)**2)
+            
+            # GTR fitting
+            n_ij, T_i, root_states = nuc_sub_count(dress.tree, alphabet = alphabet)   
+            W_ij, p_a, mu_a = GTR_simult(n_ij,T_i,root_states) 
+    #        S_a = -((h+p_a)*np.log(h+p_a)).sum(axis=0)
+            dist_GTR[jsample,jmu] = np.sum((p_a - p0_a)**2)
     
+    dist_freqs_mean = dist_freqs.mean(axis=0)
+    dist_freqs_var = (dist_freqs**2).mean(axis=0) - dist_freqs_mean**2 
+    dist_GTR_mean = dist_GTR.mean(axis=0)
+    dist_GTR_var = (dist_GTR**2).mean(axis=0) - dist_GTR_mean**2    
+    plt.figure(30); plt.clf()
+    plt.errorbar(mmu, dist_freqs_mean, yerr = np.sqrt(dist_freqs_var))
+    plt.errorbar(mmu, dist_GTR_mean, yerr = np.sqrt(dist_GTR_var))
+    plt.xlabel('mu'); plt.ylabel('distance')
+    plt.legend(('tree seq.', 'GTR'))
+    plt.savefig(outdir_name + 'dist.pdf')
+    plt.close(30)
     
+    plt.figure(30); plt.clf()
+    plt.errorbar(mmu, np.log10(dist_freqs_mean), yerr = np.sqrt(dist_freqs_var)/dist_freqs_mean/np.log(10))
+    plt.errorbar(mmu, np.log10(dist_GTR_mean), yerr = np.sqrt(dist_GTR_var)/dist_GTR_mean/np.log(10))
+    plt.xlabel('mu'); plt.ylabel('distance')
+    plt.legend(('tree seq.', 'GTR'))
+    plt.savefig(outdir_name + 'dist_log.pdf')
+    plt.close(30)
+    
+    plt.figure(30); plt.clf()
+    plt.errorbar(np.log10(mmu), np.log10(dist_freqs_mean), yerr = np.sqrt(dist_freqs_var)/dist_freqs_mean/np.log(10))
+    plt.errorbar(np.log10(mmu), np.log10(dist_GTR_mean), yerr = np.sqrt(dist_GTR_var)/dist_GTR_mean/np.log(10))
+    plt.xlabel(r'$\log_{10} \mu$'); plt.ylabel(r'$\log_{10}(distance)$')
+    plt.legend(('tree seq.', 'GTR'), loc = 0)
+    plt.savefig(outdir_name + 'dist_loglog.pdf')
+    plt.close(30)
     
