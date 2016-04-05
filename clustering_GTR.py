@@ -7,7 +7,7 @@ Created on Wed Mar 30 13:33:49 2016
 from __future__ import division
 import numpy as np
 #from scipy import linalg as LA
-#from scipy import misc
+from scipy import misc
 from Bio import Phylo #, AlignIO
 import matplotlib.pyplot as plt
 #from scipy import optimize
@@ -64,7 +64,7 @@ def Tcategories(T_ia, Nbins):
     dig = np.array([np.digitize(T_ia[jnuc,:],np.linspace(0.,Ttot+h,num = Nbins + 1)) for jnuc in xrange(q)])
     for jjbin in set([tuple(row) for row in dig.T]):
         idx = np.where(np.array([dig[jnuc,:] == jjbin[jnuc] for jnuc in xrange(q)]).sum(axis=0) == q)[0]
-        cats.append(idx_q[idx])
+        cats.append(idx)
     return cats
     
 if __name__=="__main__":
@@ -81,14 +81,14 @@ if __name__=="__main__":
     Ttot = bio_tree.total_branch_length()
     
     # generate root sequence
-    alphabet = 'ACGT'
+    alphabet = 'AG' #'ACGT'
     q = len(alphabet)
     L = 2*10**2 # sequence length
     seq0 = GTR_twoseq.random_seq_p0(L,alphabet = alphabet)
     P0 = gentree.seq_to_P(seq0, alphabet = alphabet)
     
     #dressing tree with sequences
-    mu0 = 1.
+    mu0 = 2.
     mu0_a = mu0*np.ones(L)
     W0_ij = q*(np.ones((q,q)) - np.eye(q))
 #    p0_a = np.ones((q,L))/q
@@ -124,52 +124,42 @@ if __name__=="__main__":
     
 #    idx0 = np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) < q)[0]
 #    idx_q = np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) == q)[0]
-#    ncat_ij = np.zeros((q,q,len(idx0) + 1))
-#    ncat_ij = n_ij[:,:,idx0]
-#    ncat_ij = np.append(ncat_ij,n_ij[:,:,idx_q].sum(axis=2, keepdims = True),axis=2)
-#    Tcat_i = T_i[:,idx0]
-#    Tcat_i = np.append(Tcat_i,T_i[:,idx_q].sum(axis=1, keepdims = True),axis=1)
-#    root_states_cat = root_states[:,idx0]
-#    root_states_cat = np.append(root_states_cat,root_states[:,idx_q].sum(axis=1, keepdims = True),axis=1)
+#    idx_class = [idx0,idx_q]
     
-    idx0 = np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) < q)[0]
-    idx_q = np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) == q)[0]
+#    #categorizing sites by the number of nuc. states with insufficient counts 
+#    idx_class = []
+#    for jclass in xrange(q + 1):
+#        idx_class.append(np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) == jclass)[0])    
+    
+    # categorizing by the number and identity of nuc. states with insufficient counts
+    idx_class = []
+    titles_class = []
+    for jclass in xrange(q+1):
+        if jclass == 0 or jclass == q:
+            idx_class.append(np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) == jclass)[0])
+            titles_class.append('n = {}'.format(jclass))
+        elif jclass == 1:
+            for jnuc, nuc in enumerate(alphabet):
+                idx_class.append(np.where(((n_ij.sum(axis=1) < ncr).sum(axis=0) == jclass)*\
+                (n_ij[jnuc,:,:].sum(axis=0) < ncr))[0])
+                titles_class.append('n = {}, nuc = {}'.format(jclass,nuc))
+        else:
+            for jnuc in xrange(misc.comb(q,jclass)):
+                idx_class.append(np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) == jclass)[0])
+                titles_class.append('n = {}'.format(jclass))
+    
     Nbins = 10
-#    idx_cat = []
+#    idx_cat1 = []
 #    dig = np.array([np.digitize(T_i[jnuc,idx_q],np.linspace(0.,Ttot+h,num = Nbins + 1)) for jnuc in xrange(q)])
 #    for jjbin in set([tuple(row) for row in dig.T]):
 #        idx = np.where(np.array([dig[jnuc,:] == jjbin[jnuc] for jnuc in xrange(q)]).sum(axis=0) == q)[0]
-#        idx_cat.append(idx_q[idx])
+#        idx_cat1.append(idx_q[idx])
     
-    idx_cat = Tcategories(T_i[:,idx_q], Nbins)
-#    if q == 2:
-#        idx_cat = []
-#        nnbins, Tbins = np.histogram(T_i[0,idx_q], bins = Nbins)
-#        dig = np.digitize(T_i[0,idx_q],np.linspace(0.,Ttot+h,num = Nbins + 1))
-#        idx_cat.extend([idx_q[np.where(dig == jbin + 1)[0]] for jbin in xrange(Nbins) if np.count_nonzero(dig == jbin + 1) > 0])
-#    elif q == 4:
-#        idx_cat = []
-#        nnbins, Tbins = np.histogram(T_i[0,idx_q], bins = Nbins)
-
+    idx_cat = []
+    for idx in idx_class[1:]:
+        idx_cat.extend([idx[cat] for cat in Tcategories(T_i[:,idx], Nbins)])
     
-#    ncat_ij = n_ij[:,:,idx_cat[0]]
-#    Tcat_i = T_i[:,idx_cat[0]]
-#    root_states_cat = root_states[:,idx_cat[0]]
-#    for idx in idx_cat[1:]:
-#        ncat_ij = np.append(ncat_ij,n_ij[:,:,idx].sum(axis=2, keepdims = True),axis=2)
-#        Tcat_i = np.append(Tcat_i,T_i[:,idx].sum(axis=1, keepdims = True),axis=1)
-#        root_states_cat = np.append(root_states_cat,root_states[:,idx].sum(axis=1, keepdims = True),axis=1)
-#    
-#    Wcat_ij, pcat, mucat = gentree.GTR_simult(ncat_ij,Tcat_i,root_states_cat) 
-#    pcat_a = np.zeros(p_a.shape)
-#    pcat_a[:,idx_cat[0]] = pcat[:,:len(idx_cat[0])]
-#    mucat_a = np.zeros(mu_a.shape)
-#    mucat_a[idx_cat[0]] = mucat[:len(idx_cat[0])]
-#    for jcat, idx in enumerate(idx_cat[1:]):
-#        pcat_a[:,idx] = np.array([pcat[:,len(idx_cat[0])+ jcat]]).T
-#        mucat_a[idx] = mucat[len(idx_cat[0])+ jcat]
-    
-    Wcat_ij, pcat_a, mucat_a = GTR_wcat(n_ij,T_i,root_states, idx0, idx_cat) 
+    Wcat_ij, pcat_a, mucat_a = GTR_wcat(n_ij,T_i,root_states, idx_class[0], idx_cat) 
     
     Scat_a = -((h+pcat_a)*np.log(h+pcat_a)).sum(axis=0)
     dist_GTRcat = np.sum((pcat_a - p0_a)**2)   
@@ -182,7 +172,7 @@ if __name__=="__main__":
     Like_GTRcat = gentree.dress_tree(dress.tree, seq0, mu_a = mucat_a, Wij = Wcat_ij, p0_a = pcat_a, alphabet = alphabet, logL = True)
     print 'logL0 = {}\nlogL_GTR = {}\nlogL_GTRcat = {}'.format(Like0.logL, Like_GTR.logL, Like_GTRcat.logL) 
     
-    print 'AIC_GTR = {}\nAIC_GTRcat = {}'.format(q*L - Like_GTR.logL, q*(len(idx0) + len(idx_cat)) - Like_GTRcat.logL)
+    print 'AIC_GTR = {}\nAIC_GTRcat = {}'.format(q*L - Like_GTR.logL, q*(len(idx_class[0]) + len(idx_cat)) - Like_GTRcat.logL)
     #plots
     plt.figure(10,figsize = (20,6*(q+1))); plt.clf()
     for jnuc, nuc in enumerate(alphabet):
@@ -197,7 +187,7 @@ if __name__=="__main__":
     plt.plot(Snuc/np.log(q))
     plt.plot(S_a/np.log(q))
     plt.plot(Scat_a/np.log(q))
-    for jcat, idx in enumerate(idx_cat[1:]):
+    for jcat, idx in enumerate(idx_cat):
         plt.scatter(idx,.95*np.ones(len(idx)))
 #    plt.scatter(idx_q,.95*np.ones(len(idx_q)))
     plt.xlim(0,L); plt.ylim(0.,1.)
@@ -247,18 +237,18 @@ if __name__=="__main__":
 #            for jnuc in xrange(misc.comb(q,jcat)):
 #                idx_cat.append(np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) == jcat)[0])
 #                titles_cat.append('n = {}'.format(jcat))
-#                
-#    plt.figure(20, figsize = (6*len(idx_cat),6)); plt.clf()
-#    for jcat, idx in enumerate(idx_cat):
-#        plt.subplot(1,len(idx_cat),jcat+1)
-##        idx = np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) == jcat)[0]
-#        if len(idx > 0):
-#            for jnuc0, nuc0 in enumerate(alphabet):   
-#                plt.hist(T_i[jnuc0,idx]/Ttot, bins = 20,alpha = 0.5)
-#        plt.xlabel(r'$T$'); plt.title(titles_cat[jcat])
-#        plt.legend([r'$T_' + nuc0 + '$' for nuc0 in alphabet],loc = 0)
-#    plt.savefig(outdir_name + 'Times_bycategory_hist.pdf')
-#    plt.close(20)
+    
+    plt.figure(20, figsize = (6*len(idx_class),6)); plt.clf()
+    for jclass, idx in enumerate(idx_class):
+        plt.subplot(1,len(idx_class),jclass+1)
+#        idx = np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) == jclass)[0]
+        if len(idx > 0):
+            for jnuc0, nuc0 in enumerate(alphabet):   
+                plt.hist(T_i[jnuc0,idx]/Ttot, bins = 20,alpha = 0.5)
+        plt.xlabel(r'$T$'); plt.title(titles_class[jclass])
+        plt.legend([r'$T_' + nuc0 + '$' for nuc0 in alphabet],loc = 0)
+    plt.savefig(outdir_name + 'Times_bycategory_hist.pdf')
+    plt.close(20)
     
 #    plt.figure(20, figsize = (6*(q+1),6)); plt.clf()
 #    for jnuc, nuc in enumerate(alphabet):

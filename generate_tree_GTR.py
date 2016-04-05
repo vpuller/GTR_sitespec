@@ -257,32 +257,45 @@ if __name__=="__main__":
     if not os.path.exists(outdir_name):
         os.makedirs(outdir_name)    
     
+    file_name_head = outdir_name + ''
+    
     tree_file_name = '/ebio/ag-neher/share/users/vpuller/Maximum_likelihood/ML_test_sequences/RRE/HIV1B500_RRE_nuc_tree.nwk'    
     bio_tree = Phylo.read(tree_file_name, 'newick')
     bio_tree.root.branch_length = h
   
-    # generate root sequence
     alphabet = 'ACGT'
     q = len(alphabet)
     L = 10**2 # sequence length
-    seq0 = GTR_twoseq.random_seq_p0(L,alphabet = alphabet)
-    P0 = seq_to_P(seq0, alphabet = alphabet)
     
-    #dressing tree with sequences
-    mu = 2.
-    mu_a = mu*np.ones(L)
-    Wij = q*(np.ones((q,q)) - np.eye(q))
+    
+    #specifying GTR model
+    # defining mutation rates
+    mu0 = 2.
+    mu_a0 = mu0*np.ones(L)
+#    mu_a0 = mu0*np.random.exponential(size = L)
+    
+    # defining attempt frequencies
+#    Wij = q*(np.ones((q,q)) - np.eye(q))
+    beta = q; alpha = 3.*beta
+    Wij = beta*(np.ones((q,q)) - np.eye(q)) +\
+    (alpha - beta)*(np.diag(np.ones(2),2) + np.diag(np.ones(2),k = -2))
+    
+    # defining equilibrium populations
 #    p0_a = np.ones((q,L))/q
     p0_a = np.random.exponential(size = (q,L)); p0_a = p0_a/np.sum(p0_a,axis=0)
     Snuc0 = - ((p0_a + h)*np.log(p0_a + h)).sum(axis = 0)
+
+    # generate root sequence
+    seq0 = GTR_twoseq.random_seq_p0(L,alphabet = alphabet)
+#    seq0 = 'A'*L
+#    seq0 = vp.numbers_to_string(np.argmax(p0_a, axis = 0))
+    P0 = seq_to_P(seq0, alphabet = alphabet)
     
+    #dressing tree with sequences
     t0 = time.time()
-    dress = dress_tree(bio_tree, seq0, mu_a = mu_a, Wij = Wij, p0_a = p0_a, alphabet = alphabet)
+    dress = dress_tree(bio_tree, seq0, mu_a = mu_a0, Wij = Wij, p0_a = p0_a, alphabet = alphabet)
     t1 = time.time()
     print 't = ', t1-t0
-#    dress = dress_tree(bio_tree, seq0, mu_a = mu_a, Wij = Wij, p0_a = p0_a, alphabet = alphabet, use_eigenvalues = False)
-#    t2 = time.time()
-#    print 't = ', t2-t1
     
     # array of all sequences on the tree
 #    arr = np.array([list(clade.seq) for clade in dress.tree.find_clades()])
@@ -298,11 +311,6 @@ if __name__=="__main__":
     dp_a = p_a/np.sqrt(n_ij.sum(axis=1))
     dp_a[np.where(np.sqrt(n_ij.sum(axis=1)) == 0)] = 1.
     dS_a = -(dp_a*np.log(h+p_a)).sum(axis=0)
-    
-    ncr = 9
-    idx_cat = []
-    for jcat in xrange(q + 1):
-        idx_cat.append(np.where((n_ij.sum(axis=1) < ncr).sum(axis=0) == jcat)[0])
     
     
     plt.figure(10,figsize = (20,6*(q+1))); plt.clf()
@@ -322,7 +330,7 @@ if __name__=="__main__":
 #    plt.plot(S_appx/np.log(q))
     plt.xlabel('site'); plt.ylabel('entropy')
     plt.legend(('model','tree seq.','GTR'),loc = 0)
-    plt.savefig(outdir_name + 'freqs.pdf')
+    plt.savefig(file_name_head + 'freqs.pdf')
     plt.close(10)
     
     plt.figure(20, figsize = (6*(q+1),6)); plt.clf()
@@ -333,7 +341,7 @@ if __name__=="__main__":
     plt.subplot(1,q+1,q+1)
     plt.hist(Snuc/np.log(q))
     plt.xlabel('entropy'); plt.title('Snuc')
-    plt.savefig(outdir_name + 'freq_hist.pdf')
+    plt.savefig(file_name_head + 'freq_hist.pdf')
     plt.close(20)
     
     plt.figure(20, figsize = (6*(q+1),6)); plt.clf()
@@ -344,7 +352,7 @@ if __name__=="__main__":
     plt.subplot(1,q+1,q+1)
     plt.hist(S_a/np.log(q))
     plt.xlabel('entropy'); plt.title('Snuc')
-    plt.savefig(outdir_name + 'freqGTR_hist.pdf')
+    plt.savefig(file_name_head + 'freqGTR_hist.pdf')
     plt.close(20)
 
 
@@ -354,10 +362,16 @@ if __name__=="__main__":
     mu_max = 1/branch_lengths.max()
 #    mmu = np.linspace(0.1,10,num = 20)
     mmu = 0.1*10**np.linspace(0,2,num=20)
-    Wij = q*(np.ones((q,q)) - np.eye(q))
-#    p0_a = np.ones((q,L))/q
-    p0_a = np.random.exponential(size = (q,L)); p0_a = p0_a/np.sum(p0_a,axis=0)
-#    Snuc0 = - ((p0_a + h)*np.log(p0_a + h)).sum(axis = 0)
+
+##    Wij = q*(np.ones((q,q)) - np.eye(q))
+#    beta = q; alpha = 3.*beta
+#    Wij = beta*(np.ones((q,q)) - np.eye(q)) +\
+#    (alpha - beta)*(np.diag(np.ones(2),2) + np.diag(np.ones(2),k = -2))
+#    
+##    p0_a = np.ones((q,L))/q
+#    p0_a = np.random.exponential(size = (q,L)); p0_a = p0_a/np.sum(p0_a,axis=0)
+##    Snuc0 = - ((p0_a + h)*np.log(p0_a + h)).sum(axis = 0)
+    
     Nsample = 100
     dist_GTR = np.zeros((Nsample,mmu.shape[0]))
     dist_freqs = np.zeros((Nsample,mmu.shape[0]))
@@ -365,6 +379,7 @@ if __name__=="__main__":
         print 'sample #{}'.format(jsample)
         for jmu, mu in enumerate(mmu):
             mu_a = mu*np.ones(L)
+#            mu_a = mu*mu_a0/mu0
             
             dress = dress_tree(bio_tree, seq0, mu_a = mu_a, Wij = Wij, p0_a = p0_a, alphabet = alphabet, use_eigenvalues = True)
             
@@ -384,27 +399,25 @@ if __name__=="__main__":
     dist_freqs_var = (dist_freqs**2).mean(axis=0) - dist_freqs_mean**2 
     dist_GTR_mean = dist_GTR.mean(axis=0)
     dist_GTR_var = (dist_GTR**2).mean(axis=0) - dist_GTR_mean**2    
-    plt.figure(30); plt.clf()
+    
+    plt.figure(30,figsize = (30,10)); plt.clf()
+    plt.subplot(1,3,1)
     plt.errorbar(mmu, dist_freqs_mean, yerr = np.sqrt(dist_freqs_var))
     plt.errorbar(mmu, dist_GTR_mean, yerr = np.sqrt(dist_GTR_var))
-    plt.xlabel('mu'); plt.ylabel('distance')
+    plt.xlabel(r'$\mu$'); plt.ylabel(r'$\chi^2$')
     plt.legend(('tree seq.', 'GTR'))
-    plt.savefig(outdir_name + 'dist.pdf')
-    plt.close(30)
-    
-    plt.figure(30); plt.clf()
+
+    plt.subplot(1,3,2)
     plt.errorbar(mmu, np.log10(dist_freqs_mean), yerr = np.sqrt(dist_freqs_var)/dist_freqs_mean/np.log(10))
     plt.errorbar(mmu, np.log10(dist_GTR_mean), yerr = np.sqrt(dist_GTR_var)/dist_GTR_mean/np.log(10))
-    plt.xlabel('mu'); plt.ylabel('distance')
+    plt.xlabel(r'$\mu$'); plt.ylabel(r'$\log_{10}\chi^2$')
     plt.legend(('tree seq.', 'GTR'))
-    plt.savefig(outdir_name + 'dist_log.pdf')
-    plt.close(30)
-    
-    plt.figure(30); plt.clf()
+
+    plt.subplot(1,3,3)
     plt.errorbar(np.log10(mmu), np.log10(dist_freqs_mean), yerr = np.sqrt(dist_freqs_var)/dist_freqs_mean/np.log(10))
     plt.errorbar(np.log10(mmu), np.log10(dist_GTR_mean), yerr = np.sqrt(dist_GTR_var)/dist_GTR_mean/np.log(10))
-    plt.xlabel(r'$\log_{10} \mu$'); plt.ylabel(r'$\log_{10}(distance)$')
+    plt.xlabel(r'$\log_{10} \mu$'); plt.ylabel(r'$\log_{10}\chi^2$')
     plt.legend(('tree seq.', 'GTR'), loc = 0)
-    plt.savefig(outdir_name + 'dist_loglog.pdf')
+    plt.savefig(file_name_head + 'dist.pdf')
     plt.close(30)
     
