@@ -8,7 +8,11 @@ Created on Mon Mar 21 18:09:38 2016
 from __future__ import division
 import numpy as np
 from scipy import linalg as LA
-from Bio import Phylo #, AlignIO
+from Bio import Phylo, AlignIO
+from Bio.Alphabet import generic_dna
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.Align import MultipleSeqAlignment
 import matplotlib.pyplot as plt
 #from scipy import optimize
 import sys, os
@@ -18,7 +22,10 @@ import time
 
 sys.path.append('/ebio/ag-neher/share/users/vpuller/myTOOLS/') 
 import Vadim_toolbox_file as vp
-#import GTR_class
+
+sys.path.append('/ebio/ag-neher/share/users/vpuller')
+from time_tree.treetime.gtr import GTR
+from time_tree.treetime import io
 
 #Constants
 h= 10**(-8)
@@ -175,7 +182,7 @@ class dress_tree(object):
             P1[jq,np.where((Pt[:jq,:].sum(axis=0) < MC)*(MC < Pt[:jq+1,:].sum(axis=0)))[0]] = 1
         return P1              
     
-def nuc_sub_count(tree,alphabet = 'ACGT', fpar = 0.5):        
+def nuc_sub_count(tree, alphabet = 'ACGT', fpar = 0.5):        
         '''
         Function that counts the numbers of nucleotide substitutions on tree
         
@@ -200,7 +207,6 @@ def nuc_sub_count(tree,alphabet = 'ACGT', fpar = 0.5):
         root_states = seq_to_P(tree.root.seq,alphabet = alphabet)        
         n_ij = np.copy(substitutions)     
         n_ij[range(q),range(q),:] = 0   
-#        print substitutions[:,:,0],'\n', n_ij[:,:,0]
         return n_ij, T_i, root_states
 
 def nuc_freq(aln_array, alphabet = 'ACGT'):
@@ -248,12 +254,29 @@ def GTR_simult(sub_ija, T_ia,root_states, dp = 10**(-4), Nit = 10**4):
             print '    the iterative scheme has converged, but proper normalization was not reached'
             
     return W_ij, p_ia, mu_a
+
+def mean_var(dist):
+    dist_mean = dist.mean(axis=0)
+    dist_var = (dist**2).mean(axis=0) - dist_mean**2 
+    return dist_mean, dist_var
+
+def aln_from_tree(tree, all_nodes = True):   
+    aln = MultipleSeqAlignment([], annotations={})
+    if all_nodes:
+        for jclade,clade in enumerate(tree.find_clades()):
+            seq_record=SeqRecord(Seq(clade.seq, generic_dna), id=str(clade.name))
+            aln.append(seq_record)
+    else:
+        for jclade,clade in enumerate(tree.get_terminals()):
+            seq_record=SeqRecord(Seq(clade.seq, generic_dna), id=str(clade.name))
+            aln.append(seq_record)
+    return aln
         
 if __name__=="__main__":
     '''Generating sequences for a given tree using a GTR matrix'''
     
     plt.ioff()
-    outdir_name = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/tmp/'
+    outdir_name = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/report2/'
     if not os.path.exists(outdir_name):
         os.makedirs(outdir_name)    
     
@@ -276,7 +299,7 @@ if __name__=="__main__":
     
     # defining attempt frequencies
 #    Wij = q*(np.ones((q,q)) - np.eye(q))
-    beta = q; alpha = 3.*beta
+    beta = q; alpha = beta
     Wij = beta*(np.ones((q,q)) - np.eye(q)) +\
     (alpha - beta)*(np.diag(np.ones(2),2) + np.diag(np.ones(2),k = -2))
     
@@ -355,13 +378,35 @@ if __name__=="__main__":
     plt.savefig(file_name_head + 'freqGTR_hist.pdf')
     plt.close(20)
 
-
+    plt.figure(20, figsize = (18,6)); plt.clf()
+    plt.subplot(1,3,1)
+    for jnuc in xrange(q):
+        nn_bin, x_bin = np.histogram(p0_a[jnuc,:],bins = 10, range = (0,1))
+        plt.plot(x_bin[:-1] + .5*x_bin[1], nn_bin/L)
+        plt.legend(alphabet); plt.title('Model')
+    plt.subplot(1,3,2)
+    for jnuc in xrange(q):
+        nn_bin, x_bin = np.histogram(freqs[jnuc,:],bins = 10, range = (0,1))
+        plt.plot(x_bin[:-1] + .5*x_bin[1], nn_bin/L)
+        plt.legend(alphabet); plt.title('Alignment')
+    plt.subplot(1,3,3)
+    for jnuc in xrange(q):
+        nn_bin, x_bin = np.histogram(p_a[jnuc,:],bins = 10, range = (0,1))
+        plt.plot(x_bin[:-1] + .5*x_bin[1], nn_bin/L)
+        plt.legend(alphabet); plt.title('GTR inference')
+    plt.savefig(file_name_head + 'hist.pdf')
+    
     #testing dependence of the quality of GTR reconstruction on mutation rate
     #dressing tree with sequences
     branch_lengths = np.array([clade.branch_length for clade in dress.tree.find_clades()])
+    branch_mean = branch_lengths.mean()
+    branch_var = (branch_lengths**2).mean() - branch_mean**2
+    dist_to_root = np.array([dress.tree.distance(clade) for clade in dress.tree.get_terminals()])
+    dist_to_root_mean = dist_to_root.mean()
+    
     mu_max = 1/branch_lengths.max()
 #    mmu = np.linspace(0.1,10,num = 20)
-    mmu = 0.1*10**np.linspace(0,2,num=20)
+    mmu = 0.1*10**np.linspace(0,2,num=10)
 
 ##    Wij = q*(np.ones((q,q)) - np.eye(q))
 #    beta = q; alpha = 3.*beta
@@ -372,9 +417,13 @@ if __name__=="__main__":
 #    p0_a = np.random.exponential(size = (q,L)); p0_a = p0_a/np.sum(p0_a,axis=0)
 ##    Snuc0 = - ((p0_a + h)*np.log(p0_a + h)).sum(axis = 0)
     
-    Nsample = 100
+    Nsample = 5
     dist_GTR = np.zeros((Nsample,mmu.shape[0]))
     dist_freqs = np.zeros((Nsample,mmu.shape[0]))
+    dist_GTR_anc = np.zeros((Nsample,mmu.shape[0]))
+    dist_GTR_tree = np.zeros((Nsample,mmu.shape[0]))
+#    Hamdist_GTR = np.zeros((Nsample,mmu.shape[0]))
+#    Hamdist_freqs = np.zeros((Nsample,mmu.shape[0]))
     for jsample in xrange(Nsample):
         print 'sample #{}'.format(jsample)
         for jmu, mu in enumerate(mmu):
@@ -387,37 +436,100 @@ if __name__=="__main__":
             arr = np.array([list(clade.seq) for clade in dress.tree.find_clades()])
             freqs = nuc_freq(arr, alphabet = alphabet)
     #        Snuc = - ((freqs + h)*np.log(freqs + h)).sum(axis = 0)
-            dist_freqs[jsample,jmu] = np.sum((freqs - p0_a)**2)
+            dist_freqs[jsample,jmu] = np.sqrt(np.sum((freqs - p0_a)**2))
+#            Hamdist_freqs[jsample,jmu] = L - np.sum(freqs*p0_a)
+            
             
             # GTR fitting
             n_ij, T_i, root_states = nuc_sub_count(dress.tree, alphabet = alphabet)   
             W_ij, p_a, mu_a = GTR_simult(n_ij,T_i,root_states) 
     #        S_a = -((h+p_a)*np.log(h+p_a)).sum(axis=0)
-            dist_GTR[jsample,jmu] = np.sum((p_a - p0_a)**2)
+            dist_GTR[jsample,jmu] = np.sqrt(np.sum((p_a - p0_a)**2))
+#            Hamdist_GTR[jsample,jmu] = L - np.sum(p_a*p0_a)
+            
+            
+            # GTR fitting with ancestral reconstruction
+            aln = aln_from_tree(dress.tree, all_nodes = False)
+            aln_file_name = outdir_name + 'aln_tmp.fasta'
+            with open(aln_file_name,'w') as aln_file:
+                AlignIO.write(aln,aln_file,'fasta')    
+            
+            gtr = GTR.standard()
+            t = io.treetime_from_newick(gtr, tree_file_name)
+            io.set_seqs_to_leaves(t, AlignIO.read(aln_file_name, 'fasta'))
+    #        t.optimize_seq_and_branch_len()
+            t.reconstruct_anc('ml')
+#            Ttree[jsample,jN] = t.tree.total_branch_length()
+            
+            for clade in t.tree.find_clades():
+                clade.seq = ''.join(clade.sequence)
+                
+            n_ij, T_i, root_states = nuc_sub_count(t.tree, alphabet = alphabet)   
+            W_ij, p_a, mu_a = GTR_simult(n_ij,T_i,root_states) 
+            
+            dist_GTR_anc[jsample,jmu] = np.sum((p_a - p0_a)**2)
+            
+            
+            # GTR fitting with tree reconstruction
+            rec_tree_file_name = outdir_name + 'tree_tmp.fasta'
+            call = ['/ebio/ag-neher/share/programs/bin/fasttree', '-nt','-quiet',\
+            aln_file_name, ' > ', rec_tree_file_name]
+            os.system(' '.join(call))
+            
+            gtr = GTR.standard()
+            t = io.treetime_from_newick(gtr, rec_tree_file_name)
+            io.set_seqs_to_leaves(t, AlignIO.read(aln_file_name, 'fasta'))
+    #        t.optimize_seq_and_branch_len()
+            t.reconstruct_anc('ml')
+#            Ttree[jsample,jN] = t.tree.total_branch_length()
+            
+            for clade in t.tree.find_clades():
+                clade.seq = ''.join(clade.sequence)
+                
+            n_ij, T_i, root_states = nuc_sub_count(t.tree, alphabet = alphabet)   
+            W_ij, p_a, mu_a = GTR_simult(n_ij,T_i,root_states) 
+            dist_GTR_tree[jsample,jmu] = np.sum((p_a - p0_a)**2)
+            
+            os.remove(aln_file_name); #os.remove(rec_tree_file_name)   
     
-    dist_freqs_mean = dist_freqs.mean(axis=0)
-    dist_freqs_var = (dist_freqs**2).mean(axis=0) - dist_freqs_mean**2 
-    dist_GTR_mean = dist_GTR.mean(axis=0)
-    dist_GTR_var = (dist_GTR**2).mean(axis=0) - dist_GTR_mean**2    
+    data_all = [dist_freqs, dist_GTR, dist_GTR_anc, dist_GTR_tree]
+    means = np.zeros((len(data_all),len(mmu)))
+    variances = np.zeros((len(data_all),len(mmu)))
+    for jdata, data in enumerate(data_all):
+        means[jdata,:], variances[jdata,:] = mean_var(data)
     
-    plt.figure(30,figsize = (30,10)); plt.clf()
-    plt.subplot(1,3,1)
-    plt.errorbar(mmu, dist_freqs_mean, yerr = np.sqrt(dist_freqs_var))
-    plt.errorbar(mmu, dist_GTR_mean, yerr = np.sqrt(dist_GTR_var))
-    plt.xlabel(r'$\mu$'); plt.ylabel(r'$\chi^2$')
-    plt.legend(('tree seq.', 'GTR'))
+#    dist_freqs_mean, dist_freqs_var = mean_var(dist_freqs)
+#    dist_GTR_mean, dist_GTR_var = mean_var(dist_GTR)
+#    dist_GTR_anc_mean, dist_GTR_anc_var = mean_var(dist_GTR_anc)
+#    dist_GTR_tree_mean, dist_GTR_tree_var = mean_var(dist_GTR_tree)
+    
+    leg = ('Tips alignment', 'GTR', 'GTR ancesors', 'GTR tree and ancestors')
+#    means = [dist_freqs_mean, dist_GTR_mean, dist_GTR_anc_mean, dist_GTR_tree_mean]
+#    variances = [dist_freqs_var, dist_GTR_var, dist_GTR_anc_var, dist_GTR_tree_var]
+    
+    plt.figure(30,figsize = (20,10)); plt.clf()
+    plt.subplot(1,2,1)
+    for jdata, mean_loc in enumerate(means):
+        plt.errorbar(mmu*dist_to_root_mean, np.log10(means[jdata,:]),\
+        yerr = np.sqrt(variances[jdata,:])/means[jdata,:]/np.log(10))
+#    plt.errorbar(mmu*dist_to_root_mean, np.log10(dist_freqs_mean), yerr = np.sqrt(dist_freqs_var)/dist_freqs_mean/np.log(10))
+#    plt.errorbar(mmu*dist_to_root_mean, np.log10(dist_GTR_mean), yerr = np.sqrt(dist_GTR_var)/dist_GTR_mean/np.log(10))
+#    plt.errorbar(mmu*dist_to_root_mean, np.log10(dist_GTR_anc_mean), yerr = np.sqrt(dist_GTR_anc_var)/dist_GTR_anc_mean/np.log(10))
+    plt.xlabel(r'$\mu\bar{t}_{root}$', fontsize = 18)
+    plt.ylabel(r'$\log_{10}\chi^2$', fontsize = 18)
+    plt.legend(leg, fontsize = 18)
 
-    plt.subplot(1,3,2)
-    plt.errorbar(mmu, np.log10(dist_freqs_mean), yerr = np.sqrt(dist_freqs_var)/dist_freqs_mean/np.log(10))
-    plt.errorbar(mmu, np.log10(dist_GTR_mean), yerr = np.sqrt(dist_GTR_var)/dist_GTR_mean/np.log(10))
-    plt.xlabel(r'$\mu$'); plt.ylabel(r'$\log_{10}\chi^2$')
-    plt.legend(('tree seq.', 'GTR'))
-
-    plt.subplot(1,3,3)
-    plt.errorbar(np.log10(mmu), np.log10(dist_freqs_mean), yerr = np.sqrt(dist_freqs_var)/dist_freqs_mean/np.log(10))
-    plt.errorbar(np.log10(mmu), np.log10(dist_GTR_mean), yerr = np.sqrt(dist_GTR_var)/dist_GTR_mean/np.log(10))
-    plt.xlabel(r'$\log_{10} \mu$'); plt.ylabel(r'$\log_{10}\chi^2$')
-    plt.legend(('tree seq.', 'GTR'), loc = 0)
+    plt.subplot(1,2,2)
+    for jdata, mean_loc in enumerate(means):
+        plt.errorbar(np.log10(mmu*dist_to_root_mean), np.log10(means[jdata,:]),\
+        yerr = np.sqrt(variances[jdata,:])/means[jdata,:]/np.log(10))
+#    plt.errorbar(np.log10(mmu*dist_to_root_mean), np.log10(dist_freqs_mean), yerr = np.sqrt(dist_freqs_var)/dist_freqs_mean/np.log(10))
+#    plt.errorbar(np.log10(mmu*dist_to_root_mean), np.log10(dist_GTR_mean), yerr = np.sqrt(dist_GTR_var)/dist_GTR_mean/np.log(10))
+#    plt.errorbar(np.log10(mmu*dist_to_root_mean), np.log10(dist_GTR_anc_mean), yerr = np.sqrt(dist_GTR_anc_var)/dist_GTR_anc_mean/np.log(10))
+    plt.xlabel(r'$\log_{10} (\mu\bar{t}_{root})$', fontsize = 18)
+    plt.ylabel(r'$\log_{10}\chi^2$', fontsize = 18)
+    plt.legend(leg, loc = 0, fontsize = 18)
     plt.savefig(file_name_head + 'dist.pdf')
     plt.close(30)
+    
     
