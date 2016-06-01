@@ -9,7 +9,7 @@ from __future__ import division
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-import pickle
+import cPickle as pickle
 from Bio import Phylo
 
 # Constants
@@ -49,9 +49,9 @@ class model_param_data(object):
         self.p_a = {}; self.mu_a = {}; self.Wij = {}
         self.n_ij = {}; self.T_i = {}; self.Tcons_i = {}
         self.W1_ij = {}; self.p1_i = {}
-        self.logL = {}
-        self.logL1 = np.zeros((self.Nsample,self.mmu.shape[0]))
-        self.logL1exact = np.zeros((self.Nsample,self.mmu.shape[0]))
+#        self.logL = {}
+#        self.logL1 = np.zeros((self.Nsample,self.mmu.shape[0]))
+#        self.logL1exact = np.zeros((self.Nsample,self.mmu.shape[0]))
         for jname, name in enumerate(data_names):
             print name
             p_arr = np.zeros((self.Nsample,self.mmu.shape[0], self.q, self.L))
@@ -60,28 +60,31 @@ class model_param_data(object):
             n_ij_arr = np.zeros((self.Nsample, self.mmu.shape[0], self.q, self.q, self.L))
             T_i_arr = np.zeros((self.Nsample,self.mmu.shape[0], self.q, self.L))
             Tcons_i_arr = np.zeros((self.Nsample,self.mmu.shape[0], self.q, self.L))
-            W1_arr = np.zeros((self.Nsample,self.mmu.shape[0],self.q,self.q))
-            p1_arr = np.zeros((self.Nsample,self.mmu.shape[0], self.q))
-            logL = np.zeros((self.Nsample,self.mmu.shape[0]))
+#            W1_arr = np.zeros((self.Nsample,self.mmu.shape[0],self.q,self.q))
+#            p1_arr = np.zeros((self.Nsample,self.mmu.shape[0], self.q))
+#            logL = np.zeros((self.Nsample,self.mmu.shape[0]))
             
             for jsample in xrange(self.Nsample):
+                print name, jsample
                 for jmu, mu in enumerate(self.mmu):
 #                    if name != 'aln':
                     infile_head = dir_name + '{}/sample{}_mu{}_'.format(name, jsample, jmu)
                     if os.path.exists(infile_head + 'counts.pickle'):
                         with open(infile_head + 'counts.pickle','r') as infile:
+#                            print 'counts'
                             (n_ij_arr[jsample, jmu,:,:,:], T_i_arr[jsample, jmu,:,:],\
                             Tcons_i_arr[jsample, jmu,:,:], root_states) = pickle.load(infile)
+#                            print 'GTRinf'
                         with open(infile_head + 'GTRinf.pickle','r') as infile:
                             (Wij_arr[jsample,jmu,:,:], p_arr[jsample,jmu,:,:], mu_arr[jsample,jmu,:]) = pickle.load(infile)
-                        with open(infile_head + 'GTRone.pickle','r') as infile:
-                            (W1_arr[jsample,jmu,:,:], p1_arr[jsample,jmu,:]) = pickle.load(infile)
-                        logL[jsample, jmu] = np.loadtxt(infile_head + 'logL.txt')
+#                        with open(infile_head + 'GTRone.pickle','r') as infile:
+#                            (W1_arr[jsample,jmu,:,:], p1_arr[jsample,jmu,:]) = pickle.load(infile)
+#                        logL[jsample, jmu] = np.loadtxt(infile_head + 'logL.txt')
                     else:
                         p_arr[jsample,jmu,:,:] = np.loadtxt(dir_name + '{}/sample{}_mu{}_p_a.txt'.format(name, jsample, jmu))
-                    if name == 'GTR':
-                        self.logL1[jsample, jmu] = np.loadtxt(infile_head + 'logL1.txt')
-                        self.logL1exact[jsample, jmu] = np.loadtxt(infile_head + 'logLexact.txt')
+#                    if name == 'GTR':
+#                        self.logL1[jsample, jmu] = np.loadtxt(infile_head + 'logL1.txt')
+#                        self.logL1exact[jsample, jmu] = np.loadtxt(infile_head + 'logLexact.txt')
                         
             self.p_a[name] = p_arr
             self.mu_a[name] = mu_arr
@@ -89,9 +92,9 @@ class model_param_data(object):
             self.n_ij[name] = n_ij_arr
             self.T_i[name] = T_i_arr
             self.Tcons_i[name] = Tcons_i_arr
-            self.W1_ij[name] = W1_arr
-            self.p1_i[name] = p1_arr
-            self.logL[name] = logL
+#            self.W1_ij[name] = W1_arr
+#            self.p1_i[name] = p1_arr
+#            self.logL[name] = logL
     
     def chi2_pi(self, data_names):
         '''
@@ -265,29 +268,32 @@ class model_param_data(object):
         return None
         
 if __name__=="__main__":
-    '''Generating sequences for a given tree using a GTR matrix'''
+    '''Loading data and making plots'''
     
     plt.ioff()
-    dir_name = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/L100_test1/'
+    dir_name = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/L400_simplex/'
     outdir_name = dir_name + 'plots/'
     if not os.path.exists(outdir_name):
         os.makedirs(outdir_name)    
 
 #    # loading data
 #    data_names = ['aln','GTR','GTRanc','GTRanc_rescaled', 'GTRtree', 'GTRtree_unique', 'GTRtree_site'] 
-    data_names = ['aln','aln_all','GTR','GTRanc','GTRanc_rescaled', 'GTRtree', 'GTRtree_unique'] 
+#    data_names = ['aln','aln_all','GTR','GTRanc','GTRanc_rescaled', 'GTRtree', 'GTRtree_unique'] 
+#    data_names = ['aln','aln_all', 'GTR','GTRanc_pavel','GTRanc_vadim',\
+#    'GTRtree_pavel', 'GTRtree_vadim', 'GTRsite_vadim','GTRanc_vadim_pro']
+    data_names = ['aln','GTR','GTRanc_vadim','GTRtree_vadim', 'GTRsite_vadim','GTRanc_vadim_pro']
 #    data_names = ['aln','GTR','GTRanc','GTRtree'] 
     MPD = model_param_data(dir_name, 'model', data_names)
     
     # divergence in pi
     MPD.chi2_pi_plot(data_names, outdir_name + 'dist.pdf', scale_by = 'branch_length')
-    MPD.chi2_pi_plot(data_names, outdir_name + 'dist1.pdf', scale_by = 'branch_length', oneforall = True)
+    MPD.chi2_pi_plot(data_names, outdir_name + 'dist1.pdf', scale_by = 'branch_length', oneforall = False)
     
-    # site entropies
-    MPD.site_entropy_plot(['aln','GTR','GTRanc', 'GTRtree'], outdir_name + 'entropy.pdf')
-    
-    # n_ij histograms
-    MPD.nij_hist(['GTR', 'GTRanc', 'GTRanc_rescaled', 'GTRtree'], outdir_name + 'n_ij_sum.pdf')
+#    # site entropies
+#    MPD.site_entropy_plot(['aln','GTR','GTRanc', 'GTRtree'], outdir_name + 'entropy.pdf')
+#    
+#    # n_ij histograms
+#    MPD.nij_hist(['GTR', 'GTRanc', 'GTRanc_rescaled', 'GTRtree'], outdir_name + 'n_ij_sum.pdf')
     
     # divergence in mu
     MPD.chi2_mu_plot(data_names, outdir_name + 'mu_dist.pdf', j0 = 10, scale_by = 'branch_length')
@@ -297,9 +303,9 @@ if __name__=="__main__":
 #    MPD.muave_mu_plot([data_names[j] for j in [1,2,3,4]], outdir_name + 'mu_mu0.pdf', j0 = 10, scale_by = 'branch_length')
     MPD.muave_mu_plot(['GTR'], outdir_name + 'mu_mu0.pdf', j0 = 10, scale_by = 'branch_length')
 
-
-    # Akaike information criterion
-    MPD.Akaike_plot(data_names[2:], outdir_name + 'Akaike.pdf', scale_by = 'branch_length' )
+#
+#    # Akaike information criterion
+#    MPD.Akaike_plot(data_names[2:], outdir_name + 'Akaike.pdf', scale_by = 'branch_length' )
     
 #    # comparing simulations for different sequence lengths    
 #    LL = [100, 400, 800]
