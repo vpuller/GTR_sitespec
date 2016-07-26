@@ -115,10 +115,15 @@ class model_param_data(object):
         for jsample in xrange(self.Nsample):
             for jmu, mu in enumerate(self.mmu):
                 infile_head = dir_name + '{}/sample{}_mu{}_'.format(name, jsample, jmu)
-                if os.path.exists(infile_head + 'GTRinf.pickle'):
+                if os.path.exists(infile_head + 'counts.pickle'):
                     with open(infile_head + 'counts.pickle','r') as infile:
                         (n_ij_arr[jsample, jmu,:,:,:], T_i_arr[jsample, jmu,:,:],\
                         Tcons_i_arr[jsample, jmu,:,:], root_states) = pickle.load(infile)
+                elif os.path.exists(infile_head + 'nij_Tij.pickle'):
+                    with open(infile_head + 'nij_Tij.pickle','r') as infile:
+                        (n_ij_arr[jsample, jmu,:,:,:], T_ij, root_states) = pickle.load(infile)
+                        T_i_arr[jsample, jmu,:,:] = (T_ij + np.transpose(T_ij, axes = (1,0,2))).sum(axis=0)/2
+                        Tcons_i_arr[jsample, jmu,:,:] = T_ij[range(self.q), range(self.q), :]
 #                    with open(infile_head + 'GTRinf.pickle','r') as infile:
 #                        (Wij_arr[jsample,jmu,:,:], p_arr[jsample,jmu,:,:], mu_arr[jsample,jmu,:]) = pickle.load(infile)
         return (n_ij_arr, T_i_arr, Tcons_i_arr)
@@ -209,25 +214,44 @@ class model_param_data(object):
         for jdata, mean_loc in enumerate(means):
             plt.errorbar(np.log10(xx), np.log10(means[jdata,:]),\
             yerr = np.sqrt(variances[jdata,:])/means[jdata,:]/np.log(10))
-        plt.xlabel(xlab, fontsize = 22)
+        plt.xlabel(r'$\log_{10}$' + xlab, fontsize = 22)
         plt.ylabel(r'$\log_{10}\chi^2_{\pi}$', fontsize = 22)
         plt.legend(data_legend, loc = 0, fontsize = 22)
         plt.savefig(to_file)
         plt.close(30)  
         return None
     
-    def KLmean_plot(self, data_names, to_file, scale_by = 'branch_length', oneforall = False):
+    def KLmean_plot(self, data_names, to_file, scale_by = 'branch_length', oneforall = False, data_legend = None):
         xx, xlab, factor = self.scale_mu(scale_by)
         means, variances = self.KLmean_pi(data_names)
-            
-        plt.figure(30,figsize = (10,10)); plt.clf()
+        
+        if data_legend is None:
+            data_legend = list(data_names)
+        plt.figure(30,figsize = (20,10)); plt.clf()
+#        plt.subplot(1,3,1)
+#        for jdata, mean_loc in enumerate(means):
+#            plt.errorbar(xx, means[jdata,:], yerr = np.sqrt(variances[jdata,:]))
+#        plt.xlabel(xlab, fontsize = 18)
+#        plt.ylabel(r'$KL_{mean}$', fontsize = 18)
+#        plt.legend(data_legend, fontsize = 18, loc = 0)
+        
+        plt.subplot(1,2,1)
         for jdata, mean_loc in enumerate(means):
-#            plt.errorbar(xx, np.log2(means[jdata,:]),\
-#            yerr = np.sqrt(variances[jdata,:])/means[jdata,:]/np.log(2))
-            plt.errorbar(xx, means[jdata,:], yerr = np.sqrt(variances[jdata,:]))
+            plt.errorbar(xx, np.log10(means[jdata,:]),\
+            yerr = np.sqrt(variances[jdata,:])/means[jdata,:]/np.log(10))
+#            plt.semilogy(xx, means[jdata,:])
         plt.xlabel(xlab, fontsize = 18)
-        plt.ylabel(r'$KL_{mean}$', fontsize = 18)
-        plt.legend(data_names, fontsize = 18, loc = 0)
+        plt.ylabel(r'$\log_{10}\bar{KL}$', fontsize = 18)
+        plt.legend(data_legend, fontsize = 18, loc = 0)
+        
+        plt.subplot(1,2,2)
+        for jdata, mean_loc in enumerate(means):
+            plt.errorbar(np.log10(xx), np.log10(means[jdata,:]),\
+            yerr = np.sqrt(variances[jdata,:])/means[jdata,:]/np.log(10))
+#            plt.loglog(xx, means[jdata,:])
+        plt.xlabel(r'$\log_{10}$' + xlab, fontsize = 18)
+        plt.ylabel(r'$\log_{10}\bar{KL}$', fontsize = 18)
+        plt.legend(data_legend, fontsize = 18, loc = 0)
         plt.savefig(to_file)
         plt.close(30)  
         return None
@@ -253,7 +277,7 @@ class model_param_data(object):
         plt.close(30)
         return None
 
-    def muave_mu_plot(self, data_names, to_file, j0 = 0, scale_by = 'branch_length', data_legend = None):
+    def muave_mu_plot(self, data_names, to_file, j0 = 0, jsample = 0, scale_by = 'branch_length', data_legend = None):
         xx, xlab, f = self.scale_mu(scale_by)
         if scale_by == 'dist_to_root':
             f0 = self.dist_to_root_mean
@@ -265,21 +289,12 @@ class model_param_data(object):
         if data_legend is None:
             data_legend = list(data_names)
             
-        plt.figure(30,figsize = (10,10)); plt.clf()
+        plt.figure(30,figsize = (20,10)); plt.clf()
+        plt.subplot(1,2,1)
         for jname, name in enumerate(data_names):
 #            mu_mean, mu_var = mean_var((self.mu_a[name][0,:,:]*\
-#            self.T_i[name][0,:,:,:].sum(axis = 1)/self.Tcons_i[name][0,:,:,:].sum(axis = 1)).T)
-#            print xx, mu_mean, mu_var
-#            plt.errorbar(xx[j0:], f*mu_mean[j0:], yerr = f*np.sqrt(mu_var)[j0:])
-            mu_mean, mu_var = mean_var((self.mu_a[name][0,:,:]*\
-            self.T_i[name][0,:,:,:].sum(axis=1)/self.Tcons_i[name][0,:,:,:].sum(axis=1)).T)
-##            factor_tree = np.ones(self.mmu.shape[0])*f
-##            factor_tree = f0*np.sum(self.Wij[name][0,:,:,:], axis = (1,2))/(self.q*(self.q-1))
-##            mu_mean, mu_var = mean_var((self.mu_a[name][0,:,:]*\
-##            self.T_i[name][0,:,:,:].sum(axis=1)/self.Tcons_i[name][0,:,:,:].sum(axis=1)).T)
-#            factor = f0*np.sum(self.Wij[name][0,:,:,:], axis = (1,2))/(self.q*(self.q-1))
-#            factor_tree = factor*self.T_i[name][0,:,:,:].sum(axis = (1,2))/self.T_i['GTR'][0,:,:,:].sum(axis = (1,2))
-#            plt.errorbar(xx[j0:], (mu_mean*factor_tree)[j0:], yerr = (np.sqrt(mu_var)*factor_tree)[j0:])
+#            self.T_i[name][0,:,:,:].sum(axis=1)/self.Tcons_i[name][0,:,:,:].sum(axis=1)).T)
+            mu_mean, mu_var = mean_var(self.mu_a[name][0,:,:].T)
             fact = f0*np.sum(self.Wij[name][0,:,:,:], axis = (1,2))/(self.q*(self.q-1))
             factor = fact*self.T_i[name][0,:,:,:].sum(axis = (1,2))/self.T_i['GTR'][0,:,:,:].sum(axis = (1,2))         
             plt.errorbar(xx[j0:], (mu_mean*factor)[j0:], yerr = (np.sqrt(mu_var)*factor)[j0:])
@@ -287,8 +302,30 @@ class model_param_data(object):
         plt.xlabel(xlab, fontsize = 18)
         plt.ylabel(xlab, fontsize = 18)
         plt.legend(data_legend, fontsize = 18, loc = 0)
+        
+        plt.subplot(1,2,2)
+        xx = self.mmu*self.branch_lengths.mean()*self.Wij0.sum()/(self.q*(self.q-1))
+#        yy = self.mmu*self.branch_lengths.mean()*np.diag(self.p0_a.T.dot(self.Wij0).dot(self.p0_a)).mean()
+        yy = self.mmu*self.branch_lengths.mean()*(self.Wij0.dot(self.p0_a)*self.p0_a).sum()/self.L
+        for jname, name in enumerate(data_names):
+            R_a = np.array([self.mu_a[name][jsample,jmu,:]*\
+            (self.Wij[name][jsample,jmu,:,:].dot(self.p_a[name][jsample,jmu,:,:])*\
+            self.p_a[name][jsample,jmu,:,:]).sum(axis = 0) for jmu, mu in enumerate(self.mmu)])
+            RvarR = np.array([mean_var(R_a[jmu,np.where(self.n_ij[name][0,0,:,:,:].sum(axis=(0,1)))[0]]) for jmu, mu in enumerate(self.mmu)])
+#            R_a, varR_a =  mean_var(R_a.T)
+            
+            factor = f0*self.T_i[name][0,:,:,:].sum(axis = (1,2))/self.T_i['GTR'][0,:,:,:].sum(axis = (1,2))   
+#            mu_mean, mu_var = mean_var(self.mu_a[name][0,:,:].T)
+#            fact = f0*np.sum(self.Wij[name][0,:,:,:], axis = (1,2))/(self.q*(self.q-1))
+#            factor = fact*self.T_i[name][0,:,:,:].sum(axis = (1,2))/self.T_i['GTR'][0,:,:,:].sum(axis = (1,2))         
+            plt.errorbar(xx, RvarR[:,0]*factor, yerr = (np.sqrt(RvarR[:,1])*factor))
+        plt.plot(xx,yy,':k')
+        plt.xlabel(xlab, fontsize = 18)
+        plt.ylabel(xlab, fontsize = 18)
+        plt.legend(data_legend, fontsize = 18, loc = 0)
         plt.savefig(to_file)
         plt.close(30)
+        
         return None
     
     def site_entropy_plot(self, data_names, to_file):
@@ -445,26 +482,27 @@ if __name__=="__main__":
     
     plt.ioff()
     plt.close('all')
-    dir_name = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/L100_poltree/'
+    dir_name = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/L90_simplex4/'
     outdir_name = dir_name + 'plots/'
     if not os.path.exists(outdir_name):
         os.makedirs(outdir_name)    
 
     # loading data
-    data_names = ['aln','GTR','GTRanc_vadim', 'GTRanc_pavel', 'GTRtree_vadim', 'GTRtree_pavel', 'GTRsite_vadim']
+#    data_names = ['aln','GTR','GTRanc_vadim', 'GTRanc_pavel', 'GTRtree_vadim', 'GTRtree_pavel', 'GTRsite_vadim']
 #    data_names = ['aln','GTR','GTRanc_vadim', 'GTRtree_vadim','GTRsite_vadim']
+    data_names = ['aln','GTR', 'GTRanc_pavel', 'GTRtree_pavel', 'GTRsite_vadim']
     data_legend = list(data_names)
-#    data_legend = ['Alignment', 'Inferred', 'Inferred, ancestral', 'Inferred, tree, ancestral']
+    data_legend = ['Alignment', 'Inferred', 'Inferred, ancestral', 'Inferred, tree, ancestral']
 #    data_names = ['aln', 'GTR']
-    MPD = model_param_data(dir_name, 'model', data_names, load_counts = False, load_Like = True)
+    MPD = model_param_data(dir_name, 'model', data_names, load_counts = True, load_Like = True)
 
     
     # divergence in pi
     MPD.chi2_pi_plot(data_names[:-1], outdir_name + 'dist.pdf', scale_by = 'branch_length',data_legend = data_legend)
-    MPD.chi2_pi_plot(['GTRanc_vadim', 'GTRsite_vadim'], outdir_name + 'dist_sitespec.pdf',\
-    scale_by = 'branch_length',data_legend = ['JC anc. rec.', 'site-specific anc. rec.'])
+#    MPD.chi2_pi_plot(['GTRanc_vadim', 'GTRsite_vadim'], outdir_name + 'dist_sitespec.pdf',\
+#    scale_by = 'branch_length',data_legend = ['JC anc. rec.', 'site-specific anc. rec.'])
     
-#    MPD.KLmean_plot(data_names, outdir_name + 'KL.pdf', scale_by = 'branch_length')
+    MPD.KLmean_plot(data_names[:-1], outdir_name + 'KL.pdf', scale_by = 'branch_length',data_legend = data_legend)
 #    MPD.chi2_pi_plot(data_names, outdir_name + 'dist1.pdf', scale_by = 'branch_length', oneforall = False)
     
 #    # site entropies
@@ -488,11 +526,11 @@ if __name__=="__main__":
 #    # divergence in mu
 #    MPD.chi2_mu_plot(data_names[1:], outdir_name + 'mu_dist.pdf', j0 = 10,\
 #    scale_by = 'branch_length', data_legend = data_legend[1:])
-#      
-#    
-#    # average over sequence mutation rate
-#    MPD.muave_mu_plot(data_names[1:], outdir_name + 'mu_mu0.pdf', j0 = 5,\
-#    scale_by = 'branch_length', data_legend = data_legend[1:])
+      
+    
+    # average over sequence mutation rate
+    MPD.muave_mu_plot(data_names[1:-1], outdir_name + 'mu_mu0.pdf', j0 = 0,\
+    scale_by = 'branch_length', data_legend = data_legend[1:])
 
 #
 #    # Akaike information criterion
@@ -501,28 +539,28 @@ if __name__=="__main__":
 
     
     
-    # comparing simulations for different sequence lengths    
-    scalingplot = False
-    if scalingplot:
-        LL = [100, 400]
-    #    data_names = ['aln','GTR']
-        styles = ['-o','--s',':v']
-        colors = ['b','g','r','c','m', 'y','k']
-        plt.figure(40); plt.clf()
-        for jL, L in enumerate(LL):
-            print jL, L
-            dir_name_loc = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/L{}_simplex1/'.format(L) 
-            MPD_loc = model_param_data(dir_name_loc, 'model', data_names[:-1])
-            xx, xlab, factor = MPD_loc.scale_mu('branch_length')
-            means, variances = MPD_loc.chi2_pi(data_names)
-            for jdata, mean_loc in enumerate(means):
-                plt.errorbar(xx, np.log10(means[jdata,:]),\
-                yerr = np.sqrt(variances[jdata,:])/means[jdata,:]/np.log(10), fmt = styles[jL] + colors[jdata])        
-        plt.xlabel(xlab, fontsize = 18)
-        plt.ylabel(r'$\log_{10}\chi^2_{\pi}$', fontsize = 18)
-        plt.legend(data_legend, fontsize = 18, loc = 0)
-        plt.savefig(outdir_name + 'distL.pdf')
-        plt.close(40)
+#    # comparing simulations for different sequence lengths    
+#    scalingplot = False
+#    if scalingplot:
+#        LL = [100, 400]
+#    #    data_names = ['aln','GTR']
+#        styles = ['-o','--s',':v']
+#        colors = ['b','g','r','c','m', 'y','k']
+#        plt.figure(40); plt.clf()
+#        for jL, L in enumerate(LL):
+#            print jL, L
+#            dir_name_loc = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/L{}_simplex1/'.format(L) 
+#            MPD_loc = model_param_data(dir_name_loc, 'model', data_names[:-1])
+#            xx, xlab, factor = MPD_loc.scale_mu('branch_length')
+#            means, variances = MPD_loc.chi2_pi(data_names)
+#            for jdata, mean_loc in enumerate(means):
+#                plt.errorbar(xx, np.log10(means[jdata,:]),\
+#                yerr = np.sqrt(variances[jdata,:])/means[jdata,:]/np.log(10), fmt = styles[jL] + colors[jdata])        
+#        plt.xlabel(xlab, fontsize = 18)
+#        plt.ylabel(r'$\log_{10}\chi^2_{\pi}$', fontsize = 18)
+#        plt.legend(data_legend, fontsize = 18, loc = 0)
+#        plt.savefig(outdir_name + 'distL.pdf')
+#        plt.close(40)
 
     
 #    xx, xlab, f = MPD.scale_mu('branch_length')
