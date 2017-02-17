@@ -47,7 +47,7 @@ class model_param_data(object):
             
         # loading data
         self.p_a = {}; self.mu_a = {}; self.Wij = {}
-        self.n_ij = {}; self.T_i = {}; self.Tcons_i = {}
+        self.n_ij = {}; self.T_i = {}; self.Tcons_i = {}; self.T_ij = {}
         self.W1_ij = {}; self.p1_i = {}
         self.logL = {}
 #        self.logL1 = np.zeros((self.Nsample,self.mmu.shape[0]))
@@ -70,10 +70,13 @@ class model_param_data(object):
                 self.Wij[name] = Wij_arr
                 
                 if load_counts:
-                    (n_ij_arr, T_i_arr, Tcons_i_arr) = self.load_counts(dir_name, name)
+                    (n_ij_arr, T_ij_arr) = self.load_counts(dir_name, name)
                     self.n_ij[name] = n_ij_arr
-                    self.T_i[name] = T_i_arr
-                    self.Tcons_i[name] = Tcons_i_arr
+                    self.T_ij[name] = T_ij_arr
+                    self.T_i[name] = (T_ij_arr + np.transpose(T_ij_arr, axes = (0,1,3,2,4))).sum(axis=2)/2
+                    self.Tcons_i[name] = T_ij_arr[:,:,range(self.q), range(self.q), :]
+#                    self.T_i[name] = T_i_arr
+#                    self.Tcons_i[name] = Tcons_i_arr
                 
                 if load_Like:
                     self.logL[name] = self.load_Likelihoods(dir_name, name)
@@ -110,23 +113,24 @@ class model_param_data(object):
     def load_counts(self,dir_name, name):
         print 'loading counts: ' + name, self.q, self.L
         n_ij_arr = np.zeros((self.Nsample, self.mmu.shape[0], self.q, self.q, self.L))
-        T_i_arr = np.zeros((self.Nsample,self.mmu.shape[0], self.q, self.L))
-        Tcons_i_arr = np.zeros((self.Nsample,self.mmu.shape[0], self.q, self.L)) 
+        T_ij_arr = np.zeros((self.Nsample, self.mmu.shape[0], self.q, self.q, self.L))
+#        T_i_arr = np.zeros((self.Nsample,self.mmu.shape[0], self.q, self.L))
+#        Tcons_i_arr = np.zeros((self.Nsample,self.mmu.shape[0], self.q, self.L)) 
         for jsample in xrange(self.Nsample):
             for jmu, mu in enumerate(self.mmu):
                 infile_head = dir_name + '{}/sample{}_mu{}_'.format(name, jsample, jmu)
-                if os.path.exists(infile_head + 'counts.pickle'):
-                    with open(infile_head + 'counts.pickle','r') as infile:
-                        (n_ij_arr[jsample, jmu,:,:,:], T_i_arr[jsample, jmu,:,:],\
-                        Tcons_i_arr[jsample, jmu,:,:], root_states) = pickle.load(infile)
-                elif os.path.exists(infile_head + 'nij_Tij.pickle'):
+#                if os.path.exists(infile_head + 'counts.pickle'):
+#                    with open(infile_head + 'counts.pickle','r') as infile:
+#                        (n_ij_arr[jsample, jmu,:,:,:], T_i_arr[jsample, jmu,:,:],\
+#                        Tcons_i_arr[jsample, jmu,:,:], root_states) = pickle.load(infile)
+                if os.path.exists(infile_head + 'nij_Tij.pickle'):
                     with open(infile_head + 'nij_Tij.pickle','r') as infile:
-                        (n_ij_arr[jsample, jmu,:,:,:], T_ij, root_states) = pickle.load(infile)
-                        T_i_arr[jsample, jmu,:,:] = (T_ij + np.transpose(T_ij, axes = (1,0,2))).sum(axis=0)/2
-                        Tcons_i_arr[jsample, jmu,:,:] = T_ij[range(self.q), range(self.q), :]
+                        (n_ij_arr[jsample, jmu,:,:,:], T_ij_arr[jsample, jmu,:,:,:], root_states) = pickle.load(infile)
+#                        T_i_arr[jsample, jmu,:,:] = (T_ij + np.transpose(T_ij, axes = (1,0,2))).sum(axis=0)/2
+#                        Tcons_i_arr[jsample, jmu,:,:] = T_ij[range(self.q), range(self.q), :]
 #                    with open(infile_head + 'GTRinf.pickle','r') as infile:
 #                        (Wij_arr[jsample,jmu,:,:], p_arr[jsample,jmu,:,:], mu_arr[jsample,jmu,:]) = pickle.load(infile)
-        return (n_ij_arr, T_i_arr, Tcons_i_arr)
+        return (n_ij_arr, T_ij_arr)
     
     def load_Likelihoods(self,dir_name, name):
         print 'loading likelihoods model: ' + name, self.q, self.L
@@ -177,7 +181,7 @@ class model_param_data(object):
             np.log2(self.p0_a[np.newaxis,np.newaxis,:,:]+h)), axis = (2,3))/self.L
             means[jname,:], variances[jname,:] = mean_var(KL)
         return means, variances
-        
+    
     def scale_mu(self, scale_by):
         if scale_by == 'dist_to_root':
             factor = self.dist_to_root_mean*self.Wij0.sum()/(self.q*(self.q-1))
@@ -475,14 +479,101 @@ class model_param_data(object):
         plt.savefig(to_file)
         plt.close(30)
         return None
+    
+    def mupW_to_Q(self,mu_a, p_ia, W_ij):
+        Q_ija = np.zeros((self.q,self.q,self.L))
+        for ja in xrange(self.L):    
+            Q_ija[:,:,ja] = mu_a[ja]*np.diag(p_ia[:,ja]).dot(W_ij)
+            Q_ija[:,:,ja] = Q_ija[:,:,ja] - np.diag(Q_ija[:,:,ja].sum(axis=0))
+        return Q_ija
         
+    def KL_WQ(self, data_names, to_file, scale_by = 'branch_length', data_legend = None):
+        xx, xlab, factor = self.scale_mu(scale_by)
+        if data_legend is None:
+            data_legend = list(data_names)
+
+        plt.figure(40, figsize = (40,10)); plt.clf()  
+        plt.subplot(1,4,1)          
+        for jname, name in enumerate(data_names):
+            KL = np.sum(self.Wij0*np.log((self.Wij0+ h)/(self.Wij[name] + h)) -\
+            self.Wij0 + self.Wij[name], axis = (2,3))
+            meanKL, varKL = mean_var(KL)
+            plt.errorbar(xx, np.log10(meanKL),yerr = np.sqrt(varKL)/meanKL/np.log(10))
+        plt.xlabel(xlab, fontsize = 24)
+        plt.ylabel(r'$\log_{10}KL_{W}$', fontsize = 24)
+        plt.legend(data_legend, fontsize = 18, loc = 0)
+        plt.title(r'$W_{ij}$', fontsize = 24)
+        
+        plt.subplot(1,4,2)          
+        for jname, name in enumerate(data_names):
+            mu_a = self.mu_a[name]*self.T_i[name].sum(axis = 2)/self.T_i['GTR'].sum(axis = 2)
+            KL = np.sum(self.mu0_a*np.log((self.mu0_a+ h)/(mu_a + h)) -\
+            self.mu0_a + mu_a, axis = 2)
+            meanKL, varKL = mean_var(KL)
+            plt.errorbar(xx, np.log10(meanKL),yerr = np.sqrt(varKL)/meanKL/np.log(10))
+        plt.xlabel(xlab, fontsize = 24)
+        plt.ylabel(r'$\log_{10}KL_{\mu}$', fontsize = 24)
+        plt.legend(data_legend, fontsize = 18, loc = 0)
+        plt.title(r'$\mu_{\alpha}$', fontsize = 24)
+        
+        plt.subplot(1,4,3)          
+        for jname, name in enumerate(data_names):
+            KL = np.sum(self.p0_a*np.log((self.p0_a+ h)/(self.p_a[name] + h)) -\
+            self.p0_a + self.p_a[name], axis = (2,3))
+            meanKL, varKL = mean_var(KL)
+            plt.errorbar(xx, np.log10(meanKL),yerr = np.sqrt(varKL)/meanKL/np.log(10))
+        plt.xlabel(xlab, fontsize = 24)
+        plt.ylabel(r'$\log_{10}KL_{\pi}$', fontsize = 24)
+        plt.legend(data_legend, fontsize = 18, loc = 0)
+        plt.title(r'$\pi_{i,\alpha}$', fontsize = 24)
+        
+        plt.subplot(1,4,4)
+        Q_ija0 = np.array([self.mupW_to_Q(mu_a,self.p0_a,self.Wij0) for mu_a in self.mu0_a])
+        for jname, name in enumerate(data_names):
+            jsample = 0
+            KL = np.zeros((self.Nsample,self.mmu.shape[0]))
+            for jsample in xrange(self.Nsample):
+                Q_ija = np.array([self.mupW_to_Q(mu_a*self.T_i[name][jsample,jmu,:,:].sum(axis = 0)/self.T_i['GTR'][jsample,jmu,:,:].sum(axis = 0),self.p_a[name][jsample,jmu,:,:],self.Wij[name][jsample,jmu,:,:]) 
+                for jmu, mu_a in enumerate(self.mu_a[name][jsample,:,:])])
+                KL[jsample,:] = np.sum(Q_ija0*np.log((Q_ija0+ h)/(Q_ija + h)) - Q_ija0 + Q_ija, axis = (1,2,3))
+#            plt.plot(xx, np.log10(KL))
+            meanKL, varKL = mean_var(KL)
+            plt.errorbar(xx, np.log10(meanKL),yerr = np.sqrt(varKL)/meanKL/np.log(10))
+        plt.xlabel(xlab, fontsize = 24)
+        plt.ylabel(r'$\log_{10}KL_{Q}$', fontsize = 24)
+        plt.legend(data_legend, fontsize = 18, loc = 0)
+        plt.title(r'$Q_{ij,\alpha}$', fontsize = 24)
+        
+        plt.savefig(to_file)
+        plt.close(40)
+        return None
+
+    def mu_vs_Sa(self, data_names, to_file, scale_by = 'branch_length', data_legend = None):
+#        xx, xlab, factor = self.scale_mu(scale_by)
+        if data_legend is None:
+            data_legend = list(data_names)
+          
+        plt.figure(50, figsize = (6*len(data_names), 6*self.mmu.shape[0])); plt.clf()
+        jsample = 0
+        for jmu, mu in enumerate(self.mmu):
+            for jname, name in enumerate(data_names):
+                plt.subplot(self.mmu.shape[0], len(data_names), jmu*len(data_names) + jname + 1)
+                S_a = -np.sum(self.p_a[name][jsample, jmu,:,:]*np.log(self.p_a[name][jsample, jmu,:,:]), axis = 0)
+                plt.scatter(S_a, self.mu_a[name][jsample, jmu,:]/mu)
+        plt.savefig(to_file)
+        plt.close(40)
+        
+        
+def KL_AB(A,B):
+    '''Kullback-Leibler-like divergence between two matrices'''
+    return np.sum(A*np.log(A/B) -A + B)
         
 if __name__=="__main__":
     '''Loading data and making plots'''
     
     plt.ioff()
     plt.close('all')
-    dir_name = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/L90_simplex4/'
+    dir_name = '/ebio/ag-neher/share/users/vpuller/GTR_staggered/L90_simplex/'
     outdir_name = dir_name + 'plots/'
     if not os.path.exists(outdir_name):
         os.makedirs(outdir_name)    
@@ -531,12 +622,18 @@ if __name__=="__main__":
     # average over sequence mutation rate
     MPD.muave_mu_plot(data_names[1:-1], outdir_name + 'mu_mu0.pdf', j0 = 0,\
     scale_by = 'branch_length', data_legend = data_legend[1:])
+    
+    MPD.mu_vs_Sa(data_names[1:-1], outdir_name + 'mu_vs_Sa.pdf',\
+    scale_by = 'branch_length', data_legend = data_legend[1:])
 
 #
 #    # Akaike information criterion
     MPD.Akaike_plot(data_names[1:-1], outdir_name + 'Akaike.pdf',\
     scale_by = 'branch_length',data_legend = data_legend[1:])
 
+    # KL-like divergence of Wij
+    MPD.KL_WQ(data_names[1:-1], outdir_name + 'KL_W.pdf',\
+    scale_by = 'branch_length',data_legend = data_legend[1:])
     
     
 #    # comparing simulations for different sequence lengths    
