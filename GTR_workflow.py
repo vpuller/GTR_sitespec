@@ -8,38 +8,9 @@ from __future__ import division
 import numpy as np
 import matplotlib.pyplot as plt
 import pydot
-
-
-#def pair_transitions_digraph(sub_pair, file_name):
-##    trans = sub_pair + sub_pair.T
-#    idx_bases = np.where(sub_pair.sum(axis=0) + sub_pair.sum(axis=1)> 0)[0]
-#    nodes = [pydot.Node(name = AB) for AB in pair_bases[idx_bases]]
-#    edges = [pydot.Edge(pair_bases[j0],pair_bases[j1], label = str(sub_pair[j0,j1]),\
-#    penwidth = 1+10*sub_pair[j0,j1]/np.max(sub_pair)) for j0, j1 in 
-#    np.array(np.where(sub_pair >0)).T]
-#    G = pydot.Dot(graph_type = 'digraph')
-#
-#    G_WC = pydot.Subgraph(graph_type = 'digraph', rank = 'min')
-#    G_nonWC = pydot.Subgraph(graph_type = 'digraph', rank = 'max')
-#    for j, node in enumerate(nodes):
-#        if pair_bases[idx_bases[j]] in WCbases:
-#            G_WC.add_node(node)
-#        else:
-#            G_nonWC.add_node(node)
-##        G.add_node(node)
-#
-#    G.add_subgraph(G_WC)
-#    G.add_subgraph(G_nonWC)
-#            
-#    for edge in edges:
-#        G.add_edge(edge)
-#        
-#    G.write_pdf(file_name)
-#    return None
     
 if __name__=="__main__":
-    '''Trying to learn plotting graphs by reading them from 
-    files written in the dot language'''
+    '''Making graph of workflow in GTR reconstruction project'''
     plt.ioff()
     plt.close('all')
     
